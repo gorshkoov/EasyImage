@@ -3,7 +3,7 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
 apply plugin: 'maven-publish'
 
-def artifactId = 'EasyImageFix'
+def artifactId = 'EasyImage'
 def groupId = 'com.github.gorshkoov'
 
 project.afterEvaluate {
