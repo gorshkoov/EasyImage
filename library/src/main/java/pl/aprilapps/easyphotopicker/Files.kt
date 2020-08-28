@@ -1,12 +1,16 @@
 package pl.aprilapps.easyphotopicker
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import java.io.*
 import java.text.SimpleDateFormat
@@ -25,9 +29,20 @@ object Files {
         return "ei_${System.currentTimeMillis()}"
     }
 
+    private fun generateCopiedFileName(fileToCopy: File, counter: Int): String {
+        val filenameSplit = fileToCopy.name.split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+        val extension = "." + filenameSplit[filenameSplit.size - 1]
+        val datePart = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Calendar.getInstance().time)
+        return "IMG_${datePart}_$counter$extension"
+    }
+
     private fun writeToFile(inputStream: InputStream, file: File) {
+        val outputStream = FileOutputStream(file)
+        writeToFile(inputStream, outputStream)
+    }
+
+    private fun writeToFile(inputStream: InputStream, outputStream: OutputStream) {
         try {
-            val outputStream = FileOutputStream(file)
             val buffer = ByteArray(1024)
             var length: Int = inputStream.read(buffer)
             while (length > 0) {
@@ -42,52 +57,52 @@ object Files {
     }
 
     @Throws(IOException::class)
-    private fun copyFile(src: File, dst: File) {
+    private fun copyFile(src: File, dst: OutputStream) {
         val inputStream = FileInputStream(src)
         writeToFile(inputStream, dst)
     }
 
     internal fun copyFilesInSeparateThread(context: Context, folderName: String, filesToCopy: List<File>) {
         Thread(Runnable {
-            val copiedFiles = ArrayList<File>()
-            var i = 1
+            var counter = 1
             for (fileToCopy in filesToCopy) {
-                val dstDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), folderName)
-                if (!dstDir.exists()) dstDir.mkdirs()
-
-                val filenameSplit = fileToCopy.name.split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-                val extension = "." + filenameSplit[filenameSplit.size - 1]
-                val datePart = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Calendar.getInstance().time)
-                val filename = "IMG_${datePart}_$i$extension"
-                val dstFile = File(dstDir, filename)
+                val filename = generateCopiedFileName(fileToCopy, counter)
+                val fos: OutputStream = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    getOutputStreamQ(context, filename, folderName)
+                } else {
+                    getOutputStream(filename, folderName)
+                }) ?: return@Runnable
                 try {
-                    dstFile.createNewFile()
-                    copyFile(fileToCopy, dstFile)
-                    copiedFiles.add(dstFile)
+                    copyFile(fileToCopy, fos)
                 } catch (e: IOException) {
                     e.printStackTrace()
                 }
 
-                i++
+                counter++
             }
-            scanCopiedImages(context, copiedFiles)
         }).run()
     }
 
-    private fun scanCopiedImages(context: Context, copiedImages: List<File>) {
-        val paths = arrayOfNulls<String>(copiedImages.size)
-        for (i in copiedImages.indices) {
-            paths[i] = copiedImages[i].toString()
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun getOutputStreamQ(context: Context, filename: String, folderName: String): OutputStream? {
+        val contentResolver: ContentResolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/$folderName")
         }
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val imageUri = contentResolver.insert(uri, values) ?: return null
+        return contentResolver.openOutputStream(imageUri)
+    }
 
-        MediaScannerConnection.scanFile(context,
-                paths, null,
-                object : MediaScannerConnection.OnScanCompletedListener {
-                    override fun onScanCompleted(path: String, uri: Uri) {
-                        Log.d(javaClass.simpleName, "Scanned $path:")
-                        Log.d(javaClass.simpleName, "-> uri=$uri")
-                    }
-                })
+    private fun getOutputStream(filename: String, folderName: String): OutputStream? {
+        val dstDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), folderName)
+        if (!dstDir.exists()) dstDir.mkdirs()
+
+        val dstFile = File(dstDir, filename)
+        dstFile.createNewFile()
+        return dstFile.outputStream()
     }
 
     @Throws(IOException::class)
@@ -96,7 +111,9 @@ object Files {
         val directory = tempImageDirectory(context)
         val photoFile = File(directory, generateFileName() + "." + getMimeType(context, photoUri))
         photoFile.createNewFile()
-        writeToFile(pictureInputStream, photoFile)
+        if (pictureInputStream != null) {
+            writeToFile(pictureInputStream, photoFile)
+        }
         return photoFile
     }
 
