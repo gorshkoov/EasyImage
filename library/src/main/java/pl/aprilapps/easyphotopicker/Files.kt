@@ -3,12 +3,10 @@ package pl.aprilapps.easyphotopicker
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
-import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
@@ -25,15 +23,17 @@ object Files {
         return privateTempDir
     }
 
-    private fun generateFileName(): String {
-        return "ei_${System.currentTimeMillis()}"
-    }
+    private fun generateFileName(): String = "ei_${System.currentTimeMillis()}"
 
-    private fun generateCopiedFileName(fileToCopy: File, counter: Int): String {
+    private fun generateCopiedFileName(fileToCopy: File, filename: String?, counter: Int): String {
         val filenameSplit = fileToCopy.name.split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
         val extension = "." + filenameSplit[filenameSplit.size - 1]
-        val datePart = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Calendar.getInstance().time)
-        return "IMG_${datePart}_$counter$extension"
+        return if (filename != null) {
+            "$filename$extension"
+        } else {
+            val datePart = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Calendar.getInstance().time)
+            "IMG_${datePart}_$counter$extension"
+        }
     }
 
     private fun writeToFile(inputStream: InputStream, file: File) {
@@ -62,11 +62,11 @@ object Files {
         writeToFile(inputStream, dst)
     }
 
-    internal fun copyFilesInSeparateThread(context: Context, folderName: String, filesToCopy: List<File>) {
+    internal fun copyFilesInSeparateThread(context: Context, folderName: String, filename: String?, filesToCopy: List<File>) {
         Thread(Runnable {
             var counter = 1
             for (fileToCopy in filesToCopy) {
-                val filename = generateCopiedFileName(fileToCopy, counter)
+                val filename = generateCopiedFileName(fileToCopy, filename, counter)
                 val fos: OutputStream = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     getOutputStreamQ(context, filename, folderName)
                 } else {

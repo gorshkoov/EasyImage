@@ -19,6 +19,7 @@ class EasyImage private constructor(
 ) {
 
     private var lastCameraFile: MediaFile? = null
+    private var fileName: String? = null
 
     interface Callbacks {
         fun onImagePickerError(error: Throwable, source: MediaSource)
@@ -50,11 +51,12 @@ class EasyImage private constructor(
         else -> null
     }
 
-    private fun startChooser(caller: Any) {
+    private fun startChooser(caller: Any, fileName: String? = null) {
         cleanup()
         getCallerActivity(caller)?.let { activityCaller ->
             try {
                 lastCameraFile = Files.createCameraPictureFile(context)
+                this.fileName = fileName
                 val intent = Intents.createChooserIntent(
                         context = activityCaller.context,
                         chooserTitle = chooserTitle,
@@ -86,10 +88,11 @@ class EasyImage private constructor(
         }
     }
 
-    private fun startCameraForImage(caller: Any) {
+    private fun startCameraForImage(caller: Any, fileName: String? = null) {
         cleanup()
         getCallerActivity(caller)?.let { activityCaller ->
             lastCameraFile = Files.createCameraPictureFile(context)
+            this.fileName = fileName
             val takePictureIntent = Intents.createCameraForImageIntent(activityCaller.context, lastCameraFile!!.uri)
             val capableComponent = takePictureIntent.resolveActivity(context.packageManager)
                     ?.also {
@@ -103,10 +106,11 @@ class EasyImage private constructor(
         }
     }
 
-    private fun startCameraForVideo(caller: Any) {
+    private fun startCameraForVideo(caller: Any, fileName: String? = null) {
         cleanup()
         getCallerActivity(caller)?.let { activityCaller ->
             lastCameraFile = Files.createCameraVideoFile(context)
+            this.fileName = fileName
             val recordVideoIntent = Intents.createCameraForVideoIntent(activityCaller.context, lastCameraFile!!.uri)
             val capableComponent = recordVideoIntent.resolveActivity(context.packageManager)
                     ?.also {
@@ -120,7 +124,9 @@ class EasyImage private constructor(
     }
 
     fun openChooser(activity: Activity) = startChooser(activity)
+    fun openChooser(activity: Activity, fileName: String) = startChooser(activity, fileName)
     fun openChooser(fragment: Fragment) = startChooser(fragment)
+    fun openChooser(fragment: Fragment, fileName: String) = startChooser(fragment, fileName)
     fun openChooser(fragment: android.app.Fragment) = startChooser(fragment)
     fun openDocuments(activity: Activity) = startDocuments(activity)
     fun openDocuments(fragment: Fragment) = startDocuments(fragment)
@@ -129,10 +135,14 @@ class EasyImage private constructor(
     fun openGallery(fragment: Fragment) = startGallery(fragment)
     fun openGallery(fragment: android.app.Fragment) = startGallery(fragment)
     fun openCameraForImage(activity: Activity) = startCameraForImage(activity)
+    fun openCameraForImage(activity: Activity, fileName: String) = startCameraForImage(activity, fileName)
     fun openCameraForImage(fragment: Fragment) = startCameraForImage(fragment)
+    fun openCameraForImage(fragment: Fragment, fileName: String) = startCameraForImage(fragment, fileName)
     fun openCameraForImage(fragment: android.app.Fragment) = startCameraForImage(fragment)
     fun openCameraForVideo(activity: Activity) = startCameraForVideo(activity)
+    fun openCameraForVideo(activity: Activity, fileName: String) = startCameraForVideo(activity, fileName)
     fun openCameraForVideo(fragment: Fragment) = startCameraForVideo(fragment)
+    fun openCameraForVideo(fragment: Fragment, fileName: String) = startCameraForVideo(fragment, fileName)
     fun openCameraForVideo(fragment: android.app.Fragment) = startCameraForVideo(fragment)
 
     fun handleActivityResult(requestCode: Int, resultCode: Int, resultIntent: Intent?, activity: Activity, callbacks: Callbacks) {
@@ -217,7 +227,8 @@ class EasyImage private constructor(
             try {
                 if (cameraFile.uri.toString().isEmpty()) Intents.revokeWritePermission(activity, cameraFile.uri)
                 val files = mutableListOf(cameraFile)
-                if (copyImagesToPublicGalleryFolder) Files.copyFilesInSeparateThread(activity, folderName, files.map { it.file })
+                if (copyImagesToPublicGalleryFolder) Files.copyFilesInSeparateThread(activity, folderName, fileName,
+                        files.map { it.file })
                 callbacks.onMediaFilesPicked(files.toTypedArray(), MediaSource.CAMERA_IMAGE)
             } catch (error: Throwable) {
                 error.printStackTrace()
@@ -233,7 +244,8 @@ class EasyImage private constructor(
             try {
                 if (cameraFile.uri.toString().isEmpty()) Intents.revokeWritePermission(activity, cameraFile.uri)
                 val files = mutableListOf(cameraFile)
-                if (copyImagesToPublicGalleryFolder) Files.copyFilesInSeparateThread(activity, folderName, files.map { it.file })
+                if (copyImagesToPublicGalleryFolder) Files.copyFilesInSeparateThread(activity, folderName, fileName,
+                        files.map { it.file })
                 callbacks.onMediaFilesPicked(files.toTypedArray(), MediaSource.CAMERA_VIDEO)
             } catch (error: Throwable) {
                 error.printStackTrace()
@@ -263,6 +275,7 @@ class EasyImage private constructor(
             file.delete()
             Log.d(EASYIMAGE_LOG_TAG, "Clearing reference to camera file")
             lastCameraFile = null
+            fileName = null
         }
     }
 
@@ -270,6 +283,7 @@ class EasyImage private constructor(
         lastCameraFile?.let { cameraFile ->
             Log.d(EASYIMAGE_LOG_TAG, "Clearing reference to camera file of size: ${cameraFile.file.length()}")
             lastCameraFile = null
+            this.fileName = null
         }
     }
 
